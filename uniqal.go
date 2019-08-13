@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -79,35 +78,39 @@ func UniqKey(e *calendar.Event, fields ...string) string {
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config, tokFile string) *http.Client {
+func getClient(config *oauth2.Config, tokFile string) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok = getTokenFromWeb(config)
+		tok, err = getTokenFromWeb(config)
+		if err != nil {
+			return nil, err
+		}
+
 		err := saveToken(tokFile, tok)
 		fmt.Fprintln(os.Stderr, err)
 	}
-	return config.Client(context.Background(), tok)
+	return config.Client(context.Background(), tok), nil
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config) *oauth2.Token {
+func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	fmt.Printf("Go to the following link in your browser then type the "+
 		"authorization code: \n%v\n", authURL)
 
 	var authCode string
 	if _, err := fmt.Scan(&authCode); err != nil {
-		log.Fatalf("Unable to read authorization code: %v", err)
+		return nil, xerrors.Errorf("failed to read authorization code: %v", err)
 	}
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
-		log.Fatalf("Unable to retrieve token from web: %v", err)
+		return nil, xerrors.Errorf("failed to retrieve token from web: %v", err)
 	}
-	return tok
+	return tok, nil
 }
 
 // Retrieves a token from a local file.
@@ -179,7 +182,10 @@ func (c globalCmd) Run() error {
 			return xerrors.Errorf("failed to parse the credentials: %v", err)
 		}
 	}
-	client := getClient(config, c.Token)
+	client, err := getClient(config, c.Token)
+	if err != nil {
+		return xerrors.Errorf("failed to connect services: %v", err)
+	}
 
 	srv, err := calendar.New(client)
 	if err != nil {
