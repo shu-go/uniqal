@@ -21,10 +21,10 @@ import (
 type globalCmd struct {
 	Start gli.Date    `cli:"start,s=DATE"  help:"defaults to today"`
 	Items int64       `cli:"items,n=NUMBER"  default:"10"  help:"the number of events from --start"`
-	Keys  gli.StrList `cli:"keys,k=LIST_OF_STRINGS"  default:"Description,Summary,Start,End"`
+	Keys  gli.StrList `cli:"keys,k=LIST_OF_STRINGS"  default:"Description,Summary,Start,End"  help:"comman-separated keys to test uniquity of events"`
 
-	Credential string `cli:"credentials,c=FILE_NAME" default:"./credentials.json"`
-	Token      string `cli:"token,t=FILE_NAME"       default:"./token.json"`
+	Credential string `cli:"credentials,c=FILE_NAME"  default:"./credentials.json"  help:"your client configuration file from Google Developer Console"`
+	Token      string `cli:"token,t=FILE_NAME"  default:"./token.json"  help:"file path to read/write retrieved token"`
 }
 
 var (
