@@ -10,10 +10,26 @@ import (
 	"strings"
 	"time"
 
+	"bitbucket.org/shu_go/gli"
+
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"golang.org/x/xerrors"
 	"google.golang.org/api/calendar/v3"
+)
+
+type globalCmd struct {
+	Start gli.Date    `cli:"start,s=DATE"  help:"defaults to today"`
+	Items int64       `cli:"items,n=NUMBER"  default:"10"  help:"the number of events from --start"`
+	Keys  gli.StrList `cli:"keys,k=LIST_OF_STRINGS"  default:"Description,Summary,Start,End"`
+
+	Credential string `cli:"credentials,c=FILE_NAME" default:"./credentials.json"`
+	Token      string `cli:"token,t=FILE_NAME"       default:"./token.json"`
+}
+
+var (
+	ClientID, ClientSecret string
 )
 
 func UniqKey(e *calendar.Event, fields ...string) string {
@@ -63,15 +79,15 @@ func UniqKey(e *calendar.Event, fields ...string) string {
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config) *http.Client {
+func getClient(config *oauth2.Config, tokFile string) *http.Client {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
-	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok = getTokenFromWeb(config)
-		saveToken(tokFile, tok)
+		err := saveToken(tokFile, tok)
+		fmt.Fprintln(os.Stderr, err)
 	}
 	return config.Client(context.Background(), tok)
 }
@@ -107,67 +123,105 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 }
 
 // Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) {
-	fmt.Printf("Saving credential file to: %s\n", path)
+func saveToken(path string, token *oauth2.Token) error {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		log.Fatalf("Unable to cache oauth token: %v", err)
+		xerrors.Errorf("failed to cache oauth token: %v", err)
 	}
 	defer f.Close()
 	json.NewEncoder(f).Encode(token)
+
+	return nil
 }
 
 func main() {
+	app := gli.NewWith(&globalCmd{})
+	app.Name = "uniqal"
+	app.Desc = "make each event be unique"
+	app.Version = "0.1.0"
+	app.Usage = `uniqal --credential=./my_credential.json --items=100 --start=` + time.Now().AddDate(0, 0, 7).Format("2006-01-02")
+	app.Copyright = "(C) 2019 Shuhei Kubota"
+
+	err := app.Run(os.Args)
+	if err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func (c globalCmd) Run() error {
 	uniqs := make(map[string]struct{})
 
-	b, err := ioutil.ReadFile("credentials.json")
-	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
-	}
+	var config *oauth2.Config
+	var err error
+	if _, err := os.Stat(c.Credential); err != nil {
+		c.Items = 10
+		c.Start = gli.Date(time.Now())
 
-	// If modifying these scopes, delete your previously saved token.json.
-	config, err := google.ConfigFromJSON(b, calendar.CalendarScope /*CalendarReadonlyScope*/)
-	if err != nil {
-		log.Fatalf("Unable to parse client secret file to config: %v", err)
+		config = &oauth2.Config{
+			ClientID:     ClientID,
+			ClientSecret: ClientSecret,
+			Scopes:       []string{calendar.CalendarScope},
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  "https://accounts.google.com/o/oauth2/auth",
+				TokenURL: "https://accounts.google.com/o/oauth2/token",
+			},
+		}
+	} else {
+		b, err := ioutil.ReadFile(c.Credential)
+		if err != nil {
+			return xerrors.Errorf("failed to read the credential file: %v", err)
+		}
+
+		// If modifying these scopes, delete your previously saved token.json.
+		config, err = google.ConfigFromJSON(b, calendar.CalendarScope /*CalendarReadonlyScope*/)
+		if err != nil {
+			return xerrors.Errorf("failed to parse the credentials: %v", err)
+		}
 	}
-	client := getClient(config)
+	client := getClient(config, c.Token)
 
 	srv, err := calendar.New(client)
 	if err != nil {
-		log.Fatalf("Unable to retrieve Calendar client: %v", err)
+		return xerrors.Errorf("failed to retrieve Calendar client: %v", err)
 	}
 
-	t := time.Now().Format(time.RFC3339)
+	t := c.Start.Time().Format(time.RFC3339)
 	events, err := srv.Events.List("primary").ShowDeleted(false).
-		SingleEvents(true).TimeMin(t).MaxResults(100).OrderBy("startTime").Do()
+		SingleEvents(true).TimeMin(t).MaxResults(c.Items).OrderBy("startTime").Do()
 	if err != nil {
-		log.Fatalf("Unable to retrieve next ten of the user's events: %v", err)
+		return xerrors.Errorf("failed to retrieve events: %v", err)
 	}
-	fmt.Println("Upcoming events:")
+
 	if len(events.Items) == 0 {
-		fmt.Println("No upcoming events found.")
-	} else {
-		for i, item := range events.Items {
-			date := item.Start.DateTime
-			if date == "" {
-				date = item.Start.Date
+		fmt.Println("no events")
+		return nil
+	}
+
+	for _, item := range events.Items {
+		date := item.Start.DateTime
+		if date == "" {
+			date = item.Start.Date
+		}
+
+		key := UniqKey(item, "Description", "Summary", "Start", "End")
+		if _, found := uniqs[key]; found {
+			fmt.Printf("[DEL] %v (%v)\n", item.Summary, date)
+			delevent := srv.Events.Delete("primary", item.Id)
+			err = delevent.Do()
+			if err != nil {
+				fmt.Printf("  failed to delete: %v", err)
 			}
-			fmt.Printf("%v (%v)\n", item.Summary, date)
-			if i == 0 {
-				fmt.Printf("%#v\n", item)
-			}
-			key := UniqKey(item, "Description", "Summary", "Start", "End")
-			if _, found := uniqs[key]; found {
-				fmt.Println("**TO BE DELETED**")
-				delevent := srv.Events.Delete("primary", item.Id)
-				err = delevent.Do()
-				if err != nil {
-					fmt.Printf("  failed to delete: %v", err)
-				}
-			} else {
-				uniqs[key] = struct{}{}
-				fmt.Printf("uniq key: %v\n", key)
-			}
+		} else {
+			uniqs[key] = struct{}{}
+
+			fmt.Printf("* %v (%v)\n", item.Summary, date)
 		}
 	}
+
+	return nil
+}
+
+func (c *globalCmd) Init() {
+	c.Start = gli.Date(time.Now())
 }
