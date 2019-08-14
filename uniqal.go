@@ -189,7 +189,35 @@ func main() {
 	app.Name = "uniqal"
 	app.Desc = "make each event be unique"
 	app.Version = "0.1.0"
-	app.Usage = `uniqal --credential=./my_credential.json --items=100 --start=` + time.Now().AddDate(0, 0, 7).Format("2006-01-02")
+	app.Usage = `uniqal --credential=./my_credentials.json --items=100 --start=` + time.Now().AddDate(0, 0, 7).Format("2006-01-02") + `
+
+------------
+how to start
+------------
+
+1. go to https://console.cloud.google.com
+2. make a new project
+3. enable Google Calendar API from Library
+4. download credential json
+5. rename it as credentials.json and place it in current working dir
+
+------
+--keys
+------
+
+created
+description
+end
+etag
+hangoutLink
+htmllink
+icaluid
+id
+location
+start
+summary
+updated
+`
 	app.Copyright = "(C) 2019 Shuhei Kubota"
 
 	err := app.Run(os.Args)
