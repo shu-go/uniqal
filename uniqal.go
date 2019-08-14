@@ -94,7 +94,9 @@ func getClient(config *oauth2.Config, tokFile string, port uint16, timeout time.
 		}
 
 		err := saveToken(tokFile, tok)
-		fmt.Fprintln(os.Stderr, err)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
 	}
 	return config.Client(context.Background(), tok), nil
 }
@@ -123,7 +125,6 @@ func getTokenFromWeb(config *oauth2.Config, port uint16, timeout time.Duration) 
 
 	var authCode string
 	authCode = <-codeChan
-	println(authCode)
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
