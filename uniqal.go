@@ -27,8 +27,7 @@ type globalCmd struct {
 	Credential string `cli:"credentials,c=FILE_NAME"  default:"./credentials.json"  help:"your client configuration file from Google Developer Console"`
 	Token      string `cli:"token,t=FILE_NAME"  default:"./token.json"  help:"file path to read/write retrieved token"`
 
-	AuthPort    uint16       `cli:"auth-port=NUMBER"  default:"7878"`
-	AuthTimeout gli.Duration `cli:"auth-timeout=DURATION"  default:"120s"`
+	AuthPort uint16 `cli:"auth-port=NUMBER"  default:"7878"`
 }
 
 var (
@@ -82,13 +81,13 @@ func UniqKey(e *calendar.Event, fields ...string) string {
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config, tokFile string, port uint16, timeout time.Duration) (*http.Client, error) {
+func getClient(config *oauth2.Config, tokFile string, port uint16) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok, err = getTokenFromWeb(config, port, timeout)
+		tok, err = getTokenFromWeb(config, port)
 		if err != nil {
 			return nil, err
 		}
@@ -102,15 +101,7 @@ func getClient(config *oauth2.Config, tokFile string, port uint16, timeout time.
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config, port uint16, timeout time.Duration) (*oauth2.Token, error) {
-	go func() {
-		select {
-		case <-time.After(timeout):
-			fmt.Fprintf(os.Stderr, "timed out\n")
-			os.Exit(1)
-		}
-	}()
-
+func getTokenFromWeb(config *oauth2.Config, port uint16) (*oauth2.Token, error) {
 	// setup parameters
 
 	var codeChan chan string
@@ -204,7 +195,6 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
-	os.Exit(0)
 }
 
 func (c globalCmd) Run() error {
@@ -237,7 +227,7 @@ func (c globalCmd) Run() error {
 			return xerrors.Errorf("failed to parse the credentials: %v", err)
 		}
 	}
-	client, err := getClient(config, c.Token, c.AuthPort, c.AuthTimeout.Duration())
+	client, err := getClient(config, c.Token, c.AuthPort)
 	if err != nil {
 		return xerrors.Errorf("failed to connect services: %v", err)
 	}
