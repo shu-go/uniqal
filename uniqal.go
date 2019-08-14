@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bitbucket.org/shu_go/gli"
+	"github.com/pkg/browser"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -25,6 +26,9 @@ type globalCmd struct {
 
 	Credential string `cli:"credentials,c=FILE_NAME"  default:"./credentials.json"  help:"your client configuration file from Google Developer Console"`
 	Token      string `cli:"token,t=FILE_NAME"  default:"./token.json"  help:"file path to read/write retrieved token"`
+
+	AuthPort    uint16       `cli:"auth-port=NUMBER"  default:"7878"`
+	AuthTimeout gli.Duration `cli:"auth-timeout=DURATION"  default:"120s"`
 }
 
 var (
@@ -78,13 +82,13 @@ func UniqKey(e *calendar.Event, fields ...string) string {
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(config *oauth2.Config, tokFile string) (*http.Client, error) {
+func getClient(config *oauth2.Config, tokFile string, port uint16, timeout time.Duration) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok, err = getTokenFromWeb(config)
+		tok, err = getTokenFromWeb(config, port, timeout)
 		if err != nil {
 			return nil, err
 		}
@@ -96,21 +100,71 @@ func getClient(config *oauth2.Config, tokFile string) (*http.Client, error) {
 }
 
 // Request a token from the web, then returns the retrieved token.
-func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
+func getTokenFromWeb(config *oauth2.Config, port uint16, timeout time.Duration) (*oauth2.Token, error) {
+	go func() {
+		select {
+		case <-time.After(timeout):
+			fmt.Fprintf(os.Stderr, "timed out\n")
+			os.Exit(1)
+		}
+	}()
+
+	// setup parameters
+
+	var codeChan chan string
+	config.RedirectURL = fmt.Sprintf("http://localhost:%d/", port)
+	codeChan = make(chan string)
+	go launchRedirectionServer(port, codeChan)
+
+	// request authorization (and authentication)
+
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	fmt.Printf("Go to the following link in your browser then type the "+
-		"authorization code: \n%v\n", authURL)
+	browser.OpenURL(authURL)
 
 	var authCode string
-	if _, err := fmt.Scan(&authCode); err != nil {
-		return nil, xerrors.Errorf("failed to read authorization code: %v", err)
-	}
+	authCode = <-codeChan
+	println(authCode)
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
 		return nil, xerrors.Errorf("failed to retrieve token from web: %v", err)
 	}
 	return tok, nil
+}
+
+func launchRedirectionServer(port uint16, codeChan chan string) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		code := r.FormValue("code")
+		codeChan <- code
+
+		var color string
+		var icon string
+		var result string
+		if code != "" {
+			//success
+			color = "green"
+			icon = "&#10003;"
+			result = "Successfully authenticated!!"
+		} else {
+			//fail
+			color = "red"
+			icon = "&#10008;"
+			result = "FAILED!"
+		}
+		disp := fmt.Sprintf(`<div><span style="font-size:xx-large; color:%s; border:solid thin %s;">%s</span> %s</div>`, color, color, icon, result)
+
+		fmt.Fprintf(w, `
+<html>
+	<head><title>%s pomi</title></head>
+	<body onload="open(location, '_self').close();"> <!-- Chrome won't let me close! -->
+		%s
+		<hr />
+		<p>This is a temporal page.<br />Please close it.</p>
+	</body>
+</html>
+`, icon, disp)
+	})
+	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
 // Retrieves a token from a local file.
@@ -182,7 +236,7 @@ func (c globalCmd) Run() error {
 			return xerrors.Errorf("failed to parse the credentials: %v", err)
 		}
 	}
-	client, err := getClient(config, c.Token)
+	client, err := getClient(config, c.Token, c.AuthPort, c.AuthTimeout.Duration())
 	if err != nil {
 		return xerrors.Errorf("failed to connect services: %v", err)
 	}
