@@ -205,6 +205,10 @@ func (c globalCmd) Run() error {
 	var config *oauth2.Config
 	var err error
 	if _, err := os.Stat(c.Credential); err != nil {
+		if ClientID == "" || ClientSecret == "" {
+			return xerrors.New("ClientID or ClientSecret is empty")
+		}
+
 		c.Items = 10
 		c.Start = gli.Date(time.Now())
 
