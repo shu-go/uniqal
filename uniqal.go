@@ -20,9 +20,10 @@ import (
 )
 
 type globalCmd struct {
-	Start gli.Date    `cli:"start,s=DATE"  help:"defaults to today"`
-	Items int64       `cli:"items,n=NUMBER"  default:"10"  help:"the number of events from --start"`
-	Keys  gli.StrList `cli:"keys,k=LIST_OF_STRINGS"  default:"Description,Summary,Start,End"  help:"comman-separated keys to test uniquity of events"`
+	Start      gli.Date    `cli:"start,s=DATE"  help:"defaults to today"`
+	Items      int64       `cli:"items,n=NUMBER"  default:"10"  help:"the number of events from --start"`
+	Keys       gli.StrList `cli:"keys,k=LIST_OF_STRINGS"  default:"Description,Summary,Start,End"  help:"comman-separated keys to test uniquity of events"`
+	CalendarID string      `cli:"calendar-id,id"  default:"primary"`
 
 	Credential string `cli:"credentials,c=FILE_NAME"  default:"./credentials.json"  help:"your client configuration file from Google Developer Console"`
 	Token      string `cli:"token,t=FILE_NAME"  default:"./token.json"  help:"file path to read/write retrieved token"`
@@ -195,6 +196,7 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
+	os.Exit(0)
 }
 
 func (c globalCmd) Run() error {
@@ -238,7 +240,7 @@ func (c globalCmd) Run() error {
 	}
 
 	t := c.Start.Time().Format(time.RFC3339)
-	events, err := srv.Events.List("primary").ShowDeleted(false).
+	events, err := srv.Events.List(c.CalendarID).ShowDeleted(false).
 		SingleEvents(true).TimeMin(t).MaxResults(c.Items).OrderBy("startTime").Do()
 	if err != nil {
 		return xerrors.Errorf("failed to retrieve events: %v", err)
