@@ -217,6 +217,8 @@ location
 start
 summary
 updated
+
+--keys=summary,start,end  may match for your needs.
 `
 	app.Copyright = "(C) 2019 Shuhei Kubota"
 
