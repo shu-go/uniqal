@@ -29,6 +29,8 @@ type globalCmd struct {
 	Token      string `cli:"token,t=FILE_NAME"  default:"./token.json"  help:"file path to read/write retrieved token"`
 
 	AuthPort uint16 `cli:"auth-port=NUMBER"  default:"7878"`
+
+	DryRun bool `cli:"dry-run,dry"  help:"do not exec"`
 }
 
 var (
@@ -219,6 +221,7 @@ summary
 updated
 
 --keys=summary,start,end  may match for your needs.
+And then, --dry is useful for testing.
 `
 	app.Copyright = "(C) 2019 Shuhei Kubota"
 
@@ -294,10 +297,12 @@ func (c globalCmd) Run() error {
 		key := UniqKey(item, c.Keys...)
 		if _, found := uniqs[key]; found {
 			fmt.Printf("[DEL] %v (%v)\n", item.Summary, date)
-			delevent := srv.Events.Delete("primary", item.Id)
-			err = delevent.Do()
-			if err != nil {
-				fmt.Printf("  failed to delete: %v", err)
+			if !c.DryRun {
+				delevent := srv.Events.Delete("primary", item.Id)
+				err = delevent.Do()
+				if err != nil {
+					fmt.Printf("  failed to delete: %v", err)
+				}
 			}
 		} else {
 			uniqs[key] = struct{}{}
