@@ -289,7 +289,7 @@ func (c globalCmd) Run() error {
 			date = item.Start.Date
 		}
 
-		key := UniqKey(item, "Description", "Summary", "Start", "End")
+		key := UniqKey(item, c.Keys...)
 		if _, found := uniqs[key]; found {
 			fmt.Printf("[DEL] %v (%v)\n", item.Summary, date)
 			delevent := srv.Events.Delete("primary", item.Id)

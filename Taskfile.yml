@@ -6,3 +6,7 @@ tasks:
   default:
     cmds:
       - go build -ldflags "-s -w -X main.ClientID={{.UNIQAL_CLIENT_ID}} -X main.ClientSecret={{.UNIQAL_CLIENT_SECRET}}"
+
+  build:
+    cmds:
+      - go build -ldflags "-s -w"
