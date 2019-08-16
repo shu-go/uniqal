@@ -298,7 +298,7 @@ func (c globalCmd) Run() error {
 		if _, found := uniqs[key]; found {
 			fmt.Printf("[DEL] %v (%v)\n", item.Summary, date)
 			if !c.DryRun {
-				delevent := srv.Events.Delete("primary", item.Id)
+				delevent := srv.Events.Delete(c.CalendarID, item.Id)
 				err = delevent.Do()
 				if err != nil {
 					fmt.Printf("  failed to delete: %v", err)
