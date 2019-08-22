@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"bitbucket.org/shu_go/gli"
 	"github.com/pkg/browser"
+	"github.com/shu-go/gli"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
