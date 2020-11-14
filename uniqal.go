@@ -19,6 +19,15 @@ import (
 	"google.golang.org/api/calendar/v3"
 )
 
+// Version is app version
+var Version string
+
+func init() {
+	if Version == "" {
+		Version = "dev-" + time.Now().Format("20060102")
+	}
+}
+
 type globalCmd struct {
 	Start      gli.Date    `cli:"start,s=DATE"  help:"defaults to today"`
 	Items      int64       `cli:"items,n=NUMBER"  default:"10"  help:"the number of events from --start"`
@@ -189,8 +198,8 @@ func saveToken(path string, token *oauth2.Token) error {
 func main() {
 	app := gli.NewWith(&globalCmd{})
 	app.Name = "uniqal"
+	app.Version = Version
 	app.Desc = "make each event be unique"
-	app.Version = "0.1.0"
 	app.Usage = `uniqal --credential=./my_credentials.json --items=100 --start=` + time.Now().AddDate(0, 0, 7).Format("2006-01-02") + `
 
 ------------
