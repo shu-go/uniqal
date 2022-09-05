@@ -18,6 +18,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"golang.org/x/xerrors"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/option"
 )
 
 // Version is app version
@@ -255,7 +256,8 @@ func (c globalCmd) Run() error {
 		return xerrors.Errorf("failed to connect services: %v", err)
 	}
 
-	srv, err := calendar.New(client)
+	ctx := context.Background()
+	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return xerrors.Errorf("failed to retrieve Calendar client: %v", err)
 	}
