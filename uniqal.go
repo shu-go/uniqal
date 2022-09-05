@@ -11,6 +11,7 @@ import (
 
 	"github.com/pkg/browser"
 	"github.com/shu-go/gli"
+	"github.com/shu-go/minredir"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -116,59 +117,33 @@ func getClient(config *oauth2.Config, tokFile string, port uint16) (*http.Client
 func getTokenFromWeb(config *oauth2.Config, port uint16) (*oauth2.Token, error) {
 	// setup parameters
 
-	var codeChan chan string
-	config.RedirectURL = fmt.Sprintf("http://localhost:%d/", port)
-	codeChan = make(chan string)
-	go launchRedirectionServer(port, codeChan)
+	codeChan := make(chan string)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	err, errChan := minredir.ServeTLS(ctx, fmt.Sprintf(":%v", port), codeChan)
+	if err != nil {
+		return nil, xerrors.Errorf("failed to start local TLS server: %v", err)
+	}
 
 	// request authorization (and authentication)
 
+	config.RedirectURL = fmt.Sprintf("https://localhost:%d/", port)
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 	browser.OpenURL(authURL)
 
 	var authCode string
-	authCode = <-codeChan
+	select {
+	case authCode = <-codeChan:
+		// nop
+	case err := <-errChan:
+		return nil, xerrors.Errorf("failed to retrieve token from web: %v", err)
+	}
+	cancel()
 
 	tok, err := config.Exchange(context.TODO(), authCode)
 	if err != nil {
 		return nil, xerrors.Errorf("failed to retrieve token from web: %v", err)
 	}
 	return tok, nil
-}
-
-func launchRedirectionServer(port uint16, codeChan chan string) {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		code := r.FormValue("code")
-		codeChan <- code
-
-		var color string
-		var icon string
-		var result string
-		if code != "" {
-			//success
-			color = "green"
-			icon = "&#10003;"
-			result = "Successfully authenticated!!"
-		} else {
-			//fail
-			color = "red"
-			icon = "&#10008;"
-			result = "FAILED!"
-		}
-		disp := fmt.Sprintf(`<div><span style="font-size:xx-large; color:%s; border:solid thin %s;">%s</span> %s</div>`, color, color, icon, result)
-
-		fmt.Fprintf(w, `
-<html>
-	<head><title>%s pomi</title></head>
-	<body onload="open(location, '_self').close();"> <!-- Chrome won't let me close! -->
-		%s
-		<hr />
-		<p>This is a temporal page.<br />Please close it.</p>
-	</body>
-</html>
-`, icon, disp)
-	})
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 }
 
 // Retrieves a token from a local file.
