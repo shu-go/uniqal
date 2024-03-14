@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -241,7 +240,7 @@ func (c globalCmd) Run() error {
 			},
 		}
 	} else {
-		b, err := ioutil.ReadFile(c.Credential)
+		b, err := os.ReadFile(c.Credential)
 		if err != nil {
 			return xerrors.Errorf("failed to read the credential file: %v", err)
 		}
