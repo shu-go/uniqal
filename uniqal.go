@@ -129,7 +129,10 @@ func getTokenFromWeb(config *oauth2.Config, port uint16) (*oauth2.Token, error) 
 
 	config.RedirectURL = fmt.Sprintf("https://localhost:%d/", port)
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-	browser.OpenURL(authURL)
+	err = browser.OpenURL(authURL)
+	if err != nil {
+		return nil, err
+	}
 
 	var authCode string
 	select {
@@ -163,12 +166,10 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 func saveToken(path string, token *oauth2.Token) error {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		xerrors.Errorf("failed to cache oauth token: %v", err)
+		return xerrors.Errorf("failed to cache oauth token: %v", err)
 	}
 	defer f.Close()
-	json.NewEncoder(f).Encode(token)
-
-	return nil
+	return json.NewEncoder(f).Encode(token)
 }
 
 func main() {
