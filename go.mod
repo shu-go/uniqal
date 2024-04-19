@@ -6,7 +6,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/shu-go/gli v1.5.7
 	github.com/shu-go/minredir v0.0.0-20220827031800-425d9f0c076a
-	golang.org/x/net v0.22.0
+	golang.org/x/net v0.23.0
 	golang.org/x/oauth2 v0.18.0
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
 	google.golang.org/api v0.169.0
