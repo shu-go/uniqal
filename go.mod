@@ -1,6 +1,6 @@
 module github.com/shu-go/uniqal
 
-go 1.23
+go 1.24
 
 require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
