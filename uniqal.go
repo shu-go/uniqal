@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 	"github.com/shu-go/gli"
 	"github.com/shu-go/minredir"
 
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/xerrors"
@@ -22,12 +22,6 @@ import (
 
 // Version is app version
 var Version string
-
-func init() {
-	if Version == "" {
-		Version = "dev-" + time.Now().Format("20060102")
-	}
-}
 
 type globalCmd struct {
 	Start      gli.Date    `cli:"start,s=DATE"  help:"defaults to today"`
@@ -42,10 +36,6 @@ type globalCmd struct {
 
 	DryRun bool `cli:"dry-run,dry"  help:"do not exec"`
 }
-
-var (
-	ClientID, ClientSecret string
-)
 
 func UniqKey(e *calendar.Event, fields ...string) string {
 	k := ""
@@ -117,17 +107,22 @@ func getClient(config *oauth2.Config, tokFile string, port uint16) (*http.Client
 func getTokenFromWeb(config *oauth2.Config, port uint16) (*oauth2.Token, error) {
 	// setup parameters
 
+	state, err := minredir.GenerateState()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate state: %w", err)
+	}
+
 	codeChan := make(chan string)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	err, errChan := minredir.ServeTLS(ctx, fmt.Sprintf(":%v", port), codeChan)
+	errChan, err := minredir.ServeTLS(ctx, fmt.Sprintf(":%v", port), codeChan, minredir.State(state))
 	if err != nil {
-		return nil, xerrors.Errorf("failed to start local TLS server: %v", err)
+		return nil, fmt.Errorf("failed to start local TLS server: %w", err)
 	}
 
 	// request authorization (and authentication)
 
 	config.RedirectURL = fmt.Sprintf("https://localhost:%d/", port)
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	authURL := config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 	err = browser.OpenURL(authURL)
 	if err != nil {
 		return nil, err
@@ -220,10 +215,11 @@ And then, --dry is useful for testing.
 func (c globalCmd) Run() error {
 	uniqs := make(map[string]struct{})
 
+	var clientID, clientSecret string
 	var config *oauth2.Config
 	var err error
 	if _, err := os.Stat(c.Credential); err != nil {
-		if ClientID == "" || ClientSecret == "" {
+		if clientID == "" || clientSecret == "" {
 			return xerrors.New("ClientID or ClientSecret is empty")
 		}
 
@@ -231,8 +227,8 @@ func (c globalCmd) Run() error {
 		c.Start = gli.Date(time.Now())
 
 		config = &oauth2.Config{
-			ClientID:     ClientID,
-			ClientSecret: ClientSecret,
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
 			Scopes:       []string{calendar.CalendarScope},
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  "https://accounts.google.com/o/oauth2/auth",
